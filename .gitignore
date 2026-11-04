@@ -1,0 +1,8 @@
+# Local user configuration & sensitive keys
+gemini_config.json
+device_cache.json
+
+# Temporary & trash files
+.trash/
+*.log
+*.tmp
