@@ -161,8 +161,8 @@ namespace EarbudsController
             try
             {
                 IMMDeviceCollection coll;
-                // 0 = eRender, 1 = DEVICE_STATE_ACTIVE
-                int hr = _deviceEnumerator.EnumAudioEndpoints(0, 1, out coll);
+                // 1 = DEVICE_STATE_ACTIVE, 8 = DEVICE_STATE_UNPLUGGED (Bluetooth standby)
+                int hr = _deviceEnumerator.EnumAudioEndpoints(0, 1 | 8, out coll);
                 if (hr == 0 && coll != null)
                 {
                     uint count;
@@ -358,7 +358,7 @@ namespace EarbudsController
             if (string.IsNullOrEmpty(friendlyName)) return "Audio Device";
 
             // If name is like "Headphones (OnePlus Nord Buds 3r)" or "Speakers (Realtek(R) Audio)"
-            Match m = Regex.Match(friendlyName, @"\(([^)]+)\)");
+            Match m = Regex.Match(friendlyName, @"\((.+)\)");
             if (m.Success && !string.IsNullOrEmpty(m.Groups[1].Value))
             {
                 string inside = m.Groups[1].Value.Trim();

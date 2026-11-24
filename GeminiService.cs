@@ -213,69 +213,54 @@ namespace EarbudsController
 
         private DeviceProfile QueryGemini(string deviceName, bool isBluetooth)
         {
-            using (var client = new HttpClient())
+            try
             {
-                client.Timeout = TimeSpan.FromSeconds(8);
-                client.DefaultRequestHeaders.TryAddWithoutValidation("x-goog-api-key", _apiKey);
-
-                string prompt = string.Format(
-                    "You are a hardware specialist. Analyze this audio device name reported by Windows: \"{0}\" (Bluetooth: {1}). " +
-                    "Determine if this is a known earbud/headphone model, its brand, whether it has hardware Active Noise Cancellation (ANC), " +
-                    "low-latency game mode, and sound modes. Respond ONLY in valid raw JSON with this exact schema (no markdown, no backticks):\n" +
-                    "{{\"brand\":\"...\",\"model\":\"...\",\"supportsAnc\":true/false,\"supportedModes\":[\"anc\",\"ambient\",\"off\",\"game\"],\"description\":\"one short sentence\"}}",
-                    deviceName, isBluetooth);
-
-                var payload = new
+                using (var client = new HttpClient())
                 {
-                    contents = new[]
+                    client.Timeout = TimeSpan.FromSeconds(3);
+                    client.DefaultRequestHeaders.TryAddWithoutValidation("x-goog-api-key", _apiKey);
+
+                    string prompt = string.Format(
+                        "You are a hardware specialist. Analyze this audio device name reported by Windows: \"{0}\" (Bluetooth: {1}). " +
+                        "Determine if this is a known earbud/headphone model, its brand, whether it has hardware Active Noise Cancellation (ANC), " +
+                        "low-latency game mode, and sound modes. Respond ONLY in valid raw JSON with this exact schema (no markdown, no backticks):\n" +
+                        "{{\"brand\":\"...\",\"model\":\"...\",\"supportsAnc\":true/false,\"supportedModes\":[\"anc\",\"ambient\",\"off\",\"game\"],\"description\":\"one short sentence\"}}",
+                        deviceName, isBluetooth);
+
+                    var payload = new
                     {
-                        new
+                        contents = new[]
                         {
-                            parts = new[]
+                            new
                             {
-                                new { text = prompt }
+                                parts = new[]
+                                {
+                                    new { text = prompt }
+                                }
                             }
                         }
-                    }
-                };
+                    };
 
-                string jsonPayload = _serializer.Serialize(payload);
-                var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                    string jsonPayload = _serializer.Serialize(payload);
+                    var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
-                string[] models = new[] { "gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash" };
-                HttpResponseMessage response = null;
+                    string url = string.Format(
+                        "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={0}",
+                        _apiKey);
 
-                foreach (string model in models)
-                {
-                    try
+                    var responseTask = client.PostAsync(url, content);
+                    if (responseTask.Wait(3000))
                     {
-                        string url = string.Format(
-                            "https://generativelanguage.googleapis.com/v1beta/models/{0}:generateContent?key={1}",
-                            model, _apiKey);
-                        response = client.PostAsync(url, content).Result;
-                        if (response.IsSuccessStatusCode) break;
+                        var response = responseTask.Result;
+                        if (response != null && response.IsSuccessStatusCode)
+                        {
+                            string rawResponse = response.Content.ReadAsStringAsync().Result;
+                            return ParseGeminiResponse(rawResponse);
+                        }
                     }
-                    catch { }
-                }
-
-                // If query param didn't work, try with Bearer token authorization header
-                if (response == null || !response.IsSuccessStatusCode)
-                {
-                    try
-                    {
-                        client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
-                        string url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
-                        response = client.PostAsync(url, content).Result;
-                    }
-                    catch { }
-                }
-
-                if (response != null && response.IsSuccessStatusCode)
-                {
-                    string rawResponse = response.Content.ReadAsStringAsync().Result;
-                    return ParseGeminiResponse(rawResponse);
                 }
             }
+            catch { }
             return null;
         }
 

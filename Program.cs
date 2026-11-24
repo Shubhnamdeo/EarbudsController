@@ -22,19 +22,14 @@ namespace EarbudsController
             try
             {
                 int currentId = Process.GetCurrentProcess().Id;
-                foreach (var proc in Process.GetProcesses())
+                foreach (var proc in Process.GetProcessesByName("EarbudsController"))
                 {
                     try
                     {
                         if (proc.Id != currentId)
                         {
-                            string name = proc.ProcessName;
-                            if (name.IndexOf("EarbudsController", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                name.Equals(".exe", StringComparison.OrdinalIgnoreCase))
-                            {
-                                proc.Kill();
-                                proc.WaitForExit(1000);
-                            }
+                            proc.Kill();
+                            proc.WaitForExit(1000);
                         }
                     }
                     catch { }

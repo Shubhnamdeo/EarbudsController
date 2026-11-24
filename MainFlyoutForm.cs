@@ -16,8 +16,11 @@ namespace EarbudsController
         private readonly AudioEngine _audioEngine;
         private readonly GeminiService _geminiService;
         private readonly BluetoothProtocolManager _protocolManager;
+        private readonly BatteryService _batteryService = new BatteryService();
+        private int _batteryPollCounter = 0;
 
         private Label _lblDeviceTitle;
+        private Label _lblBatteryBadge;
         private Label _lblDeviceSub;
         private ComboBox _comboDevices;
         private Button _btnSearchDevices;
@@ -58,7 +61,16 @@ namespace EarbudsController
 
             _pollTimer = new Timer();
             _pollTimer.Interval = 800;
-            _pollTimer.Tick += (s, e) => SyncVolumeFromSystem();
+            _pollTimer.Tick += (s, e) =>
+            {
+                SyncVolumeFromSystem();
+                _batteryPollCounter++;
+                if (_batteryPollCounter >= 6)
+                {
+                    _batteryPollCounter = 0;
+                    UpdateBatteryDisplay();
+                }
+            };
             _pollTimer.Start();
         }
 
@@ -78,6 +90,12 @@ namespace EarbudsController
             // Truly exit on close
             this.FormClosing += (s, e) =>
             {
+                try
+                {
+                    System.IO.File.WriteAllText(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "formclosing.log"),
+                        "FormClosing reason=" + e.CloseReason + "\nStack:\n" + Environment.StackTrace);
+                }
+                catch { }
                 Application.Exit();
             };
 
@@ -112,11 +130,25 @@ namespace EarbudsController
                 Text = "Earbuds Controller",
                 Font = new Font("Segoe UI", 12F, FontStyle.Bold),
                 Location = new Point(38, 4),
-                Size = new Size(270, 22),
+                Size = new Size(196, 22),
                 AutoEllipsis = true,
                 ForeColor = Color.White
             };
             panelHeader.Controls.Add(_lblDeviceTitle);
+
+            _lblBatteryBadge = new Label
+            {
+                Text = "🔋 --%",
+                Font = new Font("Segoe UI", 8.2F, FontStyle.Bold),
+                Location = new Point(236, 5),
+                Size = new Size(72, 22),
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = Color.FromArgb(36, 40, 52),
+                ForeColor = Color.FromArgb(74, 222, 128),
+                Visible = false
+            };
+            _lblBatteryBadge.Paint += (s, pe) => DrawRoundedBorder(pe.Graphics, _lblBatteryBadge.ClientRectangle, 4, Color.FromArgb(65, 75, 95));
+            panelHeader.Controls.Add(_lblBatteryBadge);
 
             _lblDeviceSub = new Label
             {
@@ -553,21 +585,58 @@ namespace EarbudsController
                 _lblDeviceTitle.Text = _selectedDevice.CleanName;
                 _lblDeviceSub.Text = (_selectedDevice.IsBluetooth ? "Bluetooth Earbuds" : "System Audio") + " • Connected";
 
+                UpdateBatteryDisplay();
                 TriggerDeviceIdentification(_selectedDevice);
                 SyncVolumeFromSystem();
             }
         }
 
+        private void UpdateBatteryDisplay()
+        {
+            if (_selectedDevice == null || !_selectedDevice.IsBluetooth)
+            {
+                _lblBatteryBadge.Visible = false;
+                if (_selectedDevice != null)
+                {
+                    _lblDeviceSub.Text = (_selectedDevice.IsBluetooth ? "Bluetooth Earbuds" : "System Audio") + " • Connected";
+                }
+                return;
+            }
+
+            int battery = _batteryService.GetBatteryPercentage(_selectedDevice.CleanName);
+            if (battery >= 0)
+            {
+                _lblBatteryBadge.Text = "🔋 " + battery + "%";
+                _lblBatteryBadge.ForeColor = (battery > 40) ? Color.FromArgb(74, 222, 128) :
+                                             (battery > 20) ? Color.FromArgb(251, 191, 36) :
+                                             Color.FromArgb(248, 113, 113);
+                _lblBatteryBadge.Visible = true;
+                _lblDeviceSub.Text = "Bluetooth Earbuds • 🔋 " + battery + "% Battery • Connected";
+            }
+            else
+            {
+                _lblBatteryBadge.Visible = false;
+                _lblDeviceSub.Text = "Bluetooth Earbuds • Connected";
+            }
+        }
+
         private void TriggerDeviceIdentification(AudioDevice dev)
         {
+            if (dev == null) return;
             _lblAiDesc.Text = _geminiService.AiEnabled ? "Analyzing device with AI..." : "Local mode active.";
 
-            MethodInvoker asyncIdentify = () =>
+            System.Threading.ThreadPool.QueueUserWorkItem((state) =>
             {
-                _currentProfile = _geminiService.IdentifyDevice(dev.CleanName, dev.IsBluetooth);
-                this.BeginInvoke((MethodInvoker)UpdateProfileUi);
-            };
-            asyncIdentify.BeginInvoke(null, null);
+                try
+                {
+                    _currentProfile = _geminiService.IdentifyDevice(dev.CleanName, dev.IsBluetooth);
+                    if (this.IsHandleCreated && !this.IsDisposed)
+                    {
+                        this.BeginInvoke((MethodInvoker)UpdateProfileUi);
+                    }
+                }
+                catch { }
+            });
         }
 
         private void UpdateProfileUi()

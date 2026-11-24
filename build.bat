@@ -17,8 +17,9 @@ echo Building EarbudsController.exe...
     /r:System.Net.Http.dll ^
     /out:"%~dp0EarbudsController.exe" ^
     "%~dp0AudioEngine.cs" ^
-    "%~dp0GeminiService.cs" ^
+    "%~dp0BatteryService.cs" ^
     "%~dp0BluetoothProtocolManager.cs" ^
+    "%~dp0GeminiService.cs" ^
     "%~dp0MainFlyoutForm.cs" ^
     "%~dp0TrayApplicationContext.cs" ^
     "%~dp0Program.cs"

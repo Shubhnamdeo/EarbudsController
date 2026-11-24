@@ -99,9 +99,7 @@ namespace EarbudsController
                     }
 
                     IntPtr hIcon = bmp.GetHicon();
-                    Icon icon = (Icon)Icon.FromHandle(hIcon).Clone();
-                    DestroyIcon(hIcon);
-                    return icon;
+                    return Icon.FromHandle(hIcon);
                 }
             }
             catch
